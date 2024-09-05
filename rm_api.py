@@ -1,12 +1,14 @@
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, NewType, TypeAlias
 from urllib.parse import urljoin
 
 from requests.sessions import Session
 
-BASE_URL = "https://www.root-me.org"
+BASE_URL = "https://api.www.root-me.org"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0"
 
+UserId = NewType("UserId", str)
 LanguageCode: TypeAlias = Literal["fr", "en", "de", "es", "ru", "zh"]
 
 LANGUAGE_NAMES: dict[LanguageCode, str] = {
@@ -65,3 +67,12 @@ class RootMeAPI:
         res = self._session.get(url, params=params)
         print(res.request.url)
         return res.text
+
+
+@dataclass
+class User:
+    name: str
+    id: UserId
+    account_type: str
+    points: int
+    position: int
