@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import requests
+from rm_api import RootMeAPI
 
 
 def main() -> None:
