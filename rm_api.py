@@ -1,78 +1,148 @@
-from dataclasses import dataclass
-from enum import StrEnum
-from typing import Any, Literal, NewType, TypeAlias
-from urllib.parse import urljoin
+from typing import Any, overload
 
-from requests.sessions import Session
+from httpx import AsyncClient, AsyncHTTPTransport, Timeout
 
-BASE_URL = "https://api.www.root-me.org"
+from rm_datamodel import (
+    _T,
+    AccountType,
+    Author,
+    AuthorDict,
+    AuthorId,
+    AuthorShort,
+    AuthorShortDict,
+    Challenge,
+    ChallengeDict,
+    ChallengeId,
+    ChallengeShort,
+    ChallengeShortDict,
+    DictList,
+    Language,
+    LanguageCode,
+    PagedItem,
+    PagedList,
+    Rel,
+)
+
+API_URL = "https://api.www.root-me.org"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0"
-
-UserId = NewType("UserId", str)
-LanguageCode: TypeAlias = Literal["fr", "en", "de", "es", "ru", "zh"]
-
-LANGUAGE_NAMES: dict[LanguageCode, str] = {
-    "fr": "French",
-    "en": "English",
-    "de": "German",
-    "es": "Spanish",
-    "ru": "Russian",
-    "zh": "Chinese",
-}
-
-
-class Language(StrEnum):
-    FR = "fr"
-    EN = "en"
-    DE = "de"
-    ES = "es"
-    RU = "ru"
-    ZH = "zh"
-
-    @property
-    def full_name(self) -> str:
-        return LANGUAGE_NAMES[self.value]
 
 
 class RootMeAPI:
+    _api_key: str
+    _lang: Language | None
+    _client: AsyncClient
+
     def __init__(
         self,
-        lang: LanguageCode | Language = Language.EN,
-        base_url: str = BASE_URL,
+        api_key: str,
+        lang: LanguageCode | Language | None = None,
         user_agent: str | None = None,
     ) -> None:
-        self._base_url = base_url
-        self._lang: LanguageCode = Language(lang).value
-        self._session = Session()
-        if user_agent is None:
-            user_agent = USER_AGENT
-        self._session.headers.update(
-            {
-                "User-Agent": user_agent,
-                "Accept-Language": self._lang,
-            }
+        self._api_key = api_key
+        self._lang = Language(lang) if lang else None
+
+        headers = {
+            "User-Agent": user_agent or USER_AGENT,
+        }
+        if self._lang is not None:
+            headers["Accept-Language"] = self._lang.value
+
+        self._client = AsyncClient(
+            transport=AsyncHTTPTransport(retries=3, http1=True, http2=True),
+            base_url=API_URL,
+            headers=headers,
+            cookies={"api_key": api_key},
+            timeout=Timeout(30, connect=10),
         )
 
-    def get_path(
+    @overload
+    async def api(
         self,
-        path: str = "",
-        with_lang: bool = True,
+        endpoint: str,
+        /,
+        return_type: None = None,
         params: dict[str, Any] | None = None,
-    ) -> str:
-        if with_lang:
-            if params is None:
-                params = {}
-            params["lang"] = self._lang
-        url = urljoin(self._base_url, path)
-        res = self._session.get(url, params=params)
+        use_default_lang: bool = True,
+    ) -> Any: ...
+    @overload
+    async def api(
+        self,
+        endpoint: str,
+        /,
+        return_type: type[_T],
+        params: dict[str, Any] | None = None,
+        use_default_lang: bool = True,
+    ) -> _T: ...
+
+    async def api(
+        self,
+        endpoint: str,
+        /,
+        return_type: type[_T] | None = None,
+        params: dict[str, Any] | None = None,
+        use_default_lang: bool = True,
+    ) -> _T | Any:
+        if use_default_lang and self._lang is not None:
+            params = params or {}
+            params["lang"] = self._lang.value
+        res = await self._client.get(endpoint, params=params)
         print(res.request.url)
-        return res.text
+        return res.json()
 
+    async def get_authors(
+        self,
+        name: str | None = None,
+        account_type: AccountType | None = None,
+        lang: LanguageCode | Language | None = None,
+    ) -> PagedList[AuthorShort]:
+        params: dict[str, str] = {}
+        if name is not None:
+            params["name"] = name
+        if account_type is not None:
+            params["type"] = account_type.value
+        if lang is not None:
+            params["lang"] = Language(lang).value
+        # res = await self.api("auteurs", params=params, return_type=PagedResults[AuthorShortDict])
+        res = await self.api(
+            "auteurs",
+            params=params,
+            use_default_lang=False,
+            return_type=tuple[DictList[AuthorShortDict], *tuple[Rel, ...]],
+        )
+        return PagedList.from_pagedresults(res, AuthorShort)  # type: ignore
 
-@dataclass
-class User:
-    name: str
-    id: UserId
-    account_type: str
-    points: int
-    position: int
+    async def get_author(self, author_id: AuthorId) -> Author:
+        res = await self.api(f"auteurs/{author_id}", return_type=AuthorDict)
+        return Author.from_dict(res)
+
+    async def get_challenges(
+        self,
+        titre: str | None = None,
+        soustitre: str | None = None,
+        lang: LanguageCode | Language | None = None,
+        score: int | None = None,
+        id_auteur: list[AuthorId] | None = None,
+    ) -> PagedList[ChallengeShort]:
+        params: dict[str, str] = {}
+        if titre is not None:
+            params["titre"] = titre
+        if soustitre is not None:
+            params["soustitre"] = soustitre
+        if lang is not None:
+            params["lang"] = Language(lang).value
+        if score is not None:
+            params["score"] = str(score)
+        if id_auteur is not None:
+            params["id_auteur"] = [str(i) for i in id_auteur]
+        res = await self.api(
+            "challenges",
+            params=params,
+            use_default_lang=False,
+            return_type=tuple[DictList[ChallengeShortDict], *tuple[Rel, ...]],
+        )
+
+        return PagedList.from_pagedresults(res, ChallengeShort)  # type: ignore
+
+    async def get_challenge(self, challenge_id: ChallengeId) -> PagedList[Challenge]:
+        res = await self.api(f"challenges/{challenge_id}", return_type=ChallengeDict)
+        return PagedItem.from_pagedresult(res, target_type=Challenge)  # type: ignore
