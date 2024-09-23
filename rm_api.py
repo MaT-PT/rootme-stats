@@ -87,6 +87,7 @@ class RootMeAPI:
             params["lang"] = self._lang.value
         res = await self._client.get(endpoint, params=params)
         print(res.request.url)
+        # print(res.request.headers)
         return res.json()
 
     async def get_authors(
@@ -97,12 +98,11 @@ class RootMeAPI:
     ) -> PagedList[AuthorShort]:
         params: dict[str, str] = {}
         if name is not None:
-            params["name"] = name
+            params["nom"] = name
         if account_type is not None:
-            params["type"] = account_type.value
+            params["statut"] = account_type.value
         if lang is not None:
             params["lang"] = Language(lang).value
-        # res = await self.api("auteurs", params=params, return_type=PagedResults[AuthorShortDict])
         res = await self.api(
             "auteurs",
             params=params,
@@ -121,9 +121,9 @@ class RootMeAPI:
         soustitre: str | None = None,
         lang: LanguageCode | Language | None = None,
         score: int | None = None,
-        id_auteur: list[AuthorId] | None = None,
+        id_auteur: AuthorId | list[AuthorId] | None = None,
     ) -> PagedList[ChallengeShort]:
-        params: dict[str, str] = {}
+        params: dict[str, str | list[str]] = {}
         if titre is not None:
             params["titre"] = titre
         if soustitre is not None:
@@ -133,7 +133,9 @@ class RootMeAPI:
         if score is not None:
             params["score"] = str(score)
         if id_auteur is not None:
-            params["id_auteur"] = [str(i) for i in id_auteur]
+            params["id_auteur[]"] = (
+                [str(i) for i in id_auteur] if isinstance(id_auteur, list) else str(id_auteur)
+            )
         res = await self.api(
             "challenges",
             params=params,
