@@ -20,15 +20,14 @@ from typing import (
     TypeVar,
     overload,
 )
-
-# TODO: Create data model for requests and other responses
+from urllib.parse import SplitResult, parse_qs, parse_qsl, urlsplit
 
 _T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)
 _T_contra = TypeVar("_T_contra", contravariant=True)
 _TD = TypeVar("_TD", bound=Mapping[str, Any])
-_TD_co = TypeVar("_TD_co", bound=Mapping[str, Any])
-_TD_contra = TypeVar("_TD_contra", bound=Mapping[str, Any])
+_TD_co = TypeVar("_TD_co", bound=Mapping[str, Any], covariant=True)
+_TD_contra = TypeVar("_TD_contra", bound=Mapping[str, Any], contravariant=True)
 
 AuthorId = NewType("AuthorId", int)
 ChallengeId = NewType("ChallengeId", int)
@@ -91,6 +90,18 @@ def parse_date(value: DateStr) -> datetime:
     return datetime.fromisoformat(value)
 
 
+def split_url(value: Url) -> SplitResult:
+    return urlsplit(value)
+
+
+def parse_url_qs(value: Url) -> dict[str, list[str]]:
+    return parse_qs(split_url(value).query)
+
+
+def parse_url_qsl(value: Url) -> list[tuple[str, str]]:
+    return parse_qsl(split_url(value).query)
+
+
 class Language(StrEnum):
     FR = "fr"
     EN = "en"
@@ -147,137 +158,156 @@ class Rank(StrEnum):
         return self.name.capitalize()
 
 
-class Rel(TypedDict):
+class Rel(StrEnum):
+    PREV = "previous"
+    NEXT = "next"
+
+
+class RelDict(TypedDict):
     rel: RelType
     href: Url
 
 
-PagedResults: TypeAlias = tuple[DictList[_TD], *tuple[Rel, ...]]
-# PagedData: TypeAlias = tuple[list[_T], *tuple[Rel, ...]]
-
-
-class PagedItem(Generic[_T]):
-    _item: _T
+class PagedData(ABC, Generic[_T_co]):
+    _data: _T_co
     _rels: dict[RelType, Url]
 
-    def __init__(self, item: _T, rels: dict[RelType, Url] | None = None) -> None:
-        self._item = item
+    def __init__(self, data: _T_co, rels: dict[RelType, Url] | None = None) -> None:
+        self._data = data
         self._rels = rels or {}
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}({self._item!r}, {self._rels!r})"
+        return f"{type(self).__name__}({self._data!r}, {self._rels!r})"
 
     def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, PagedItem):
+        if not isinstance(other, type(self)):
             return NotImplemented
-        return self._item == other._item and self._rels == other._rels
+        return self._data == other._data and self._rels == other._rels
 
+    @property
+    def data(self) -> _T_co:
+        return self._data
+
+    @property
+    def rels(self) -> dict[RelType, Url]:
+        return self._rels
+
+    def rel(self, rel: RelType | Rel) -> Url | None:
+        return self._rels.get(rel.value if isinstance(rel, Rel) else rel)
+
+    def rel_split(self, rel: RelType | Rel) -> SplitResult | None:
+        url = self.rel(rel)
+        return None if url is None else split_url(url)
+
+    @property
+    def prev(self) -> Url | None:
+        return self.rel(Rel.PREV)
+
+    @property
+    def next(self) -> Url | None:
+        return self.rel(Rel.NEXT)
+
+    @property
+    def prev_split(self) -> SplitResult | None:
+        url = self.prev
+        return None if url is None else split_url(url)
+
+    @property
+    def next_split(self) -> SplitResult | None:
+        url = self.next
+        return None if url is None else split_url(url)
+
+    @property
+    def prev_start(self) -> int | None:
+        url = self.prev
+        if url is None:
+            return None
+        query = parse_url_qsl(url)
+        start_values = [int(v) for k, v in query if k.startswith("debut_")]
+        if len(start_values) == 0:
+            return 0
+        if len(start_values) > 1:
+            raise ValueError(f"Multiple start values found in previous URL query: {url}")
+        return start_values[0]
+
+    @property
+    def next_start(self) -> int | None:
+        url = self.next
+        if url is None:
+            return None
+        query = parse_url_qsl(url)
+        start_values = [int(v) for k, v in query if k.startswith("debut_")]
+        if len(start_values) == 0:
+            return 0
+        if len(start_values) > 1:
+            raise ValueError(f"Multiple start values found in next URL query: {url}")
+        return start_values[0]
+
+
+class PagedItem(PagedData[_T_co]):
     @classmethod
-    def from_rawrels(cls, item: _T, *rels: Rel) -> PagedItem[_T]:
-        return cls(item, {rel["rel"]: rel["href"] for rel in rels})
+    def from_rawrels(cls: type[PagedItem[_T]], data: _T, *rels: RelDict) -> PagedItem[_T]:
+        return cls(data, {rel["rel"]: rel["href"] for rel in rels})
 
     @staticmethod
     def from_pagedresult(
-        result: tuple[_TD, *tuple[Rel, ...]],
+        result: tuple[_TD, *tuple[RelDict, ...]],
         target_type: type[TypedDictDataclass[_TD]],
     ) -> PagedItem[TypedDictDataclass[_TD]]:
         return PagedItem[TypedDictDataclass[_TD]].from_rawrels(
             target_type.from_dict(result[0]), *result[1:]
         )
 
-    @property
-    def item(self) -> _T:
-        return self._item
 
-    @property
-    def rels(self) -> dict[RelType, Url]:
-        return self._rels
-
-    @property
-    def prev(self) -> Url | None:
-        return self._rels.get("previous")
-
-    @property
-    def next(self) -> Url | None:
-        return self._rels.get("next")
-
-
-class PagedList(Sequence[_T_co]):
-    _list: list[_T_co]
-    _rels: dict[RelType, Url]
-
+class PagedList(PagedData[Sequence[_T_co]], Sequence[_T_co]):
     def __init__(self, data: Iterable[_T_co], rels: dict[RelType, Url] | None = None) -> None:
-        self._list = list(data)
-        self._rels = rels or {}
-
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}({self._list!r}, {self._rels!r})"
+        super().__init__(list(data), rels)
 
     def __iter__(self) -> Iterator[_T_co]:
-        return iter(self._list)
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, PagedList):
-            return NotImplemented
-        return self._list == other._list and self._rels == other._rels
+        return iter(self._data)
 
     @overload
     def __getitem__(self, index: int) -> _T_co: ...
     @overload
-    def __getitem__(self, index: slice) -> PagedList[_T_co]: ...
-    def __getitem__(self, index: int | slice) -> _T_co | PagedList[_T_co]:
+    def __getitem__(self, index: slice) -> Self: ...
+    def __getitem__(self, index: int | slice) -> _T_co | Self:
         if isinstance(index, slice):
-            return PagedList(self._list[index], self._rels)
-        return self._list[index]
+            return type(self)(self._data[index], self._rels)
+        return self._data[index]
 
     def __len__(self) -> int:
-        return len(self._list)
+        return len(self._data)
 
     def __contains__(self, value: Any) -> bool:
-        return value in self._list
+        return value in self._data
 
     def __reversed__(self) -> Iterator[_T_co]:
-        return reversed(self._list)
+        return reversed(self._data)
 
     @classmethod
-    def from_rawrels(cls, data: Iterable[_T_co], *rels: Rel) -> PagedList[_T_co]:
+    def from_rawrels(cls, data: Iterable[_T_co], *rels: RelDict) -> Self:
         return cls(data, {rel["rel"]: rel["href"] for rel in rels})
 
     @staticmethod
     def from_pagedresults(
-        # results: PagedResults[_TD], target_type: type[_TDD_contra]
-        results: tuple[DictList[_TD], *tuple[Rel, ...]],
+        results: tuple[DictList[_TD], *tuple[RelDict, ...]],
         target_type: type[TypedDictDataclass[_TD]],
     ) -> PagedList[TypedDictDataclass[_TD]]:
         return PagedList[TypedDictDataclass[_TD]].from_rawrels(
             target_type.from_dictlist(results[0]), *results[1:]
         )
 
-    @property
-    def rels(self) -> dict[RelType, Url]:
-        return self._rels
-
-    @property
-    def prev(self) -> Url | None:
-        return self._rels.get("previous")
-
-    @property
-    def next(self) -> Url | None:
-        return self._rels.get("next")
-
 
 class TypedDictDataclass(ABC, Generic[_TD]):
+    # _base_typed_dict: ClassVar[type[Mapping[str, Any]]]  # ClassVar[type[_TD]] not supported
+
     @classmethod
     @abstractmethod
     def from_dict(cls, data: _TD) -> Self: ...
 
     @classmethod
     def from_dictlist(cls, dictlist: DictList[_TD]) -> list[Self]:
-        print("dictlist:", dictlist)
         return [cls.from_dict(val) for val in dictlist.values()]
-
-
-_TDD_contra = TypeVar("_TDD_contra", bound=TypedDictDataclass[Any], contravariant=True)
 
 
 class AuthorShortDict(TypedDict):
@@ -432,7 +462,6 @@ class Challenge(TypedDictDataclass[ChallengeDict]):
 
     @classmethod
     def from_dict(cls, data: ChallengeDict) -> Self:
-        print(data)
         return cls(
             titre=data["titre"],
             rubrique=data["rubrique"],
