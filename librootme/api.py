@@ -3,22 +3,17 @@ from urllib.parse import parse_qs
 
 from httpx import AsyncClient, AsyncHTTPTransport, Timeout
 
-from .rm_datamodel import (
-    _T,
-    _TD,
+from .datamodel import (
     AccountType,
     Author,
     AuthorDict,
-    AuthorId,
     AuthorShort,
     AuthorShortDict,
     Challenge,
     ChallengeDict,
-    ChallengeId,
     ChallengeShort,
     ChallengeShortDict,
     ChallengeVeryShort,
-    DictList,
     Language,
     LanguageCode,
     PagedItem,
@@ -29,6 +24,7 @@ from .rm_datamodel import (
     TypedDictDataclass,
     ValidationChallenge,
 )
+from .types import _T, _TD, AuthorId, ChallengeId, DictList
 
 API_URL = "https://api.www.root-me.org"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0"

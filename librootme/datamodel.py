@@ -5,46 +5,50 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum, StrEnum
 from html import unescape
-from enum import StrEnum
 from typing import (
     Any,
     Generic,
     Iterable,
     Iterator,
     Literal,
-    Mapping,
-    NewType,
     NotRequired,
     Self,
     Sequence,
     TypeAlias,
     TypedDict,
-    TypeVar,
     overload,
 )
-from urllib.parse import SplitResult, parse_qs, parse_qsl, urljoin, urlsplit
+from urllib.parse import SplitResult
 
-_T = TypeVar("_T")
-_T_co = TypeVar("_T_co", covariant=True)
-_T_contra = TypeVar("_T_contra", contravariant=True)
-_TD = TypeVar("_TD", bound=Mapping[str, Any])
-_TD_co = TypeVar("_TD_co", bound=Mapping[str, Any], covariant=True)
-_TD_contra = TypeVar("_TD_contra", bound=Mapping[str, Any], contravariant=True)
+from .types import (
+    _T,
+    _TD,
+    AuthorId,
+    BoolStr,
+    ChallengeId,
+    ChallengeIndex,
+    DateStr,
+    DictList,
+    DifficultyStr,
+    IntStr,
+    RelativeLocalizedUrl,
+    RelativeUrl,
+    SolutionId,
+    Url,
+    _T_co,
+)
+from .utils import (
+    bool_yn,
+    get_absolute_url,
+    indent,
+    parse_bool,
+    parse_date,
+    parse_int,
+    parse_url_qsl,
+    split_url,
+    strip_tags,
+)
 
-AuthorId = NewType("AuthorId", int)
-ChallengeId = NewType("ChallengeId", int)
-SolutionId = NewType("SolutionId", int)
-ChallengeIndex = NewType("ChallengeIndex", str)
-DifficultyStr = NewType("DifficultyStr", str)
-Url = NewType("Url", str)
-RelativeUrl = NewType("RelativeUrl", str)
-RelativeLocalizedUrl = NewType("RelativeLocalizedUrl", RelativeUrl)
-IntStr = NewType("IntStr", str)
-DateStr = NewType("DateStr", str)
-
-DictList: TypeAlias = dict[IntStr, _T]
-
-BoolStr: TypeAlias = Literal["true", "false"]
 LanguageCode: TypeAlias = Literal["fr", "en", "de", "es", "ru", "zh"]
 AccountTypeCode: TypeAlias = Literal[
     "0minirezo",
@@ -77,47 +81,6 @@ ACCOUNT_TYPE_COLORS: dict[AccountTypeCode, str] = {
     "1comite": "#DE770F",
     "6forum": "#00CC00",
 }
-
-
-def parse_bool(value: BoolStr) -> bool:
-    return value == "true"
-
-
-def parse_int(value: IntStr) -> int:
-    return int(value)
-
-
-def parse_date(value: DateStr) -> datetime:
-    return datetime.fromisoformat(value)
-
-
-def split_url(value: Url) -> SplitResult:
-    return urlsplit(value)
-
-
-def parse_url_qs(value: Url) -> dict[str, list[str]]:
-    return parse_qs(split_url(value).query)
-
-
-def parse_url_qsl(value: Url) -> list[tuple[str, str]]:
-    return parse_qsl(split_url(value).query)
-
-
-def bool_yn(value: bool) -> str:
-    return "yes" if value else "no"
-
-
-def indent(text: str | Iterable[str], spaces: int = 2, add_newline: bool = False) -> str:
-    if isinstance(text, str):
-        text = text.splitlines()
-    indented = "\n".join(" " * spaces + line for line in text)
-    if add_newline and len(indented) > 0:
-        indented += "\n"
-    return indented
-
-
-def get_absolute_url(rel_url: RelativeUrl, base_url: Url | str = "https://www.root-me.org/") -> Url:
-    return Url(urljoin(base_url, rel_url))
 
 
 class Language(StrEnum):
@@ -357,6 +320,56 @@ CATEGORY_NAMES: dict[Language, dict[Category, str]] = {
         Category.APP_SYSTEM: "应用程序 - 系统",
         Category.FORENSIC: "法医",
     },
+}
+
+
+class Difficulty(StrEnum):
+    VERY_EASY = "Très facile"
+    EASY = "Facile"
+    MEDIUM = "Moyen"
+    HARD = "Difficile"
+    VERY_HARD = "Très difficile"
+
+    @classmethod
+    def from_str(cls, value: DifficultyStr) -> Difficulty:
+        value_str = strip_tags(value).lower()
+        for diff_name in DIFFICULTY_NAMES.values():
+            for diff, name in diff_name.items():
+                if value_str == name.lower():
+                    return diff
+        return cls(value_str)
+
+    def localized_name(self, lang: Language | LanguageCode) -> str:
+        lang = Language(lang)
+        if lang not in DIFFICULTY_NAMES:
+            lang = Language.EN
+        return DIFFICULTY_NAMES[lang][self]
+
+
+DIFFICULTY_NAMES: dict[Language, dict[Difficulty, str]] = {
+    Language.FR: {
+        Difficulty.VERY_EASY: "Très facile",
+        Difficulty.EASY: "Facile",
+        Difficulty.MEDIUM: "Moyen",
+        Difficulty.HARD: "Difficile",
+        Difficulty.VERY_HARD: "Très difficile",
+    },
+    Language.EN: {
+        Difficulty.VERY_EASY: "Very easy",
+        Difficulty.EASY: "Easy",
+        Difficulty.MEDIUM: "Medium",
+        Difficulty.HARD: "Hard",
+        Difficulty.VERY_HARD: "Very hard",
+    },
+    Language.DE: {
+        Difficulty.VERY_EASY: "Sehr einfach",
+        Difficulty.EASY: "Einfach",
+        Difficulty.MEDIUM: "Mittel",
+        Difficulty.HARD: "Schwer",
+        Difficulty.VERY_HARD: "Sehr Schwer",
+    },
+    # Other languages haven't been translated on the website or API,
+    # they use the French names wrapped in a <span lang="fr"> tag
 }
 
 
@@ -698,7 +711,7 @@ class Challenge(TypedDictDataclass[ChallengeDict]):
     url_challenge: RelativeLocalizedUrl
     date_publication: datetime
     maj: datetime
-    difficulte: DifficultyStr
+    difficulte: Difficulty
     auteurs: list[AuthorShort]
     validations: list[ValidationChallenge]
 
@@ -715,7 +728,7 @@ class Challenge(TypedDictDataclass[ChallengeDict]):
             url_challenge=RelativeLocalizedUrl(data["url_challenge"]),
             date_publication=parse_date(data["date_publication"]),
             maj=parse_date(data["maj"]),
-            difficulte=DifficultyStr(data["difficulte"]),
+            difficulte=Difficulty.from_str(data["difficulte"]),
             auteurs=[AuthorShort.from_dict(author) for author in data["auteurs"].values()],
             validations=[
                 ValidationChallenge.from_dict(validation)
@@ -733,11 +746,15 @@ class Challenge(TypedDictDataclass[ChallengeDict]):
             f"| Updated: {self.maj} "
         )
 
-    def pretty(self) -> str:
+    def pretty(self, lang: Language = Language.EN) -> str:
+        cat_str = self.rubrique
+        cat_localized = self.id_rubrique.category.get_name(lang)
+        if cat_str != cat_localized:
+            cat_str += f" [{cat_localized}]"
         return (
-            f"{self.titre} ({self.rubrique}) | Id: {self.index_challenge} ({self.id_trad})\n"
+            f"{self.titre} ({cat_str}) | Id: {self.index_challenge} ({self.id_trad})\n"
             f"> {self.soustitre}\n"
-            f"  Score: {self.score} [{self.difficulte}] "
+            f"  Score: {self.score} [{self.difficulte.localized_name(lang)}] "
             f"| Created: {self.date_publication} "
             f"| Updated: {self.maj}\n"
             f"  Authors: {', '.join(str(author) for author in self.auteurs)}\n"
