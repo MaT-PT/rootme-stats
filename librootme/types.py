@@ -1,4 +1,4 @@
-from typing import Any, Literal, Mapping, NewType, TypeAlias, TypeVar
+from typing import Any, Literal, Mapping, NewType, Protocol, TypeAlias, TypeVar, runtime_checkable
 
 _T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)
@@ -21,3 +21,8 @@ DateStr = NewType("DateStr", str)
 DictList: TypeAlias = dict[IntStr, _T]
 
 BoolStr: TypeAlias = Literal["true", "false"]
+
+
+@runtime_checkable
+class PrettyPrintable(Protocol):
+    def pretty(self, *args: Any, **kwargs: Any) -> str: ...

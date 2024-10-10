@@ -16,6 +16,8 @@ from typing import (
     Sequence,
     TypeAlias,
     TypedDict,
+    cast,
+    final,
     overload,
 )
 from urllib.parse import SplitResult
@@ -31,6 +33,7 @@ from .types import (
     DictList,
     DifficultyStr,
     IntStr,
+    PrettyPrintable,
     RelativeLocalizedUrl,
     RelativeUrl,
     SolutionId,
@@ -453,7 +456,7 @@ class PagedData(ABC, Generic[_T_co]):
         return self.get_rel_start(Rel.NEXT)
 
 
-class PagedItem(PagedData[_T_co]):
+class PagedItem(PagedData[_T_co], PrettyPrintable):
     @classmethod
     def from_rawrels(cls: type[PagedItem[_T]], data: _T, *rels: RelDict) -> PagedItem[_T]:
         return cls(data, {rel["rel"]: rel["href"] for rel in rels})
@@ -470,8 +473,13 @@ class PagedItem(PagedData[_T_co]):
     def __str__(self) -> str:
         return str(self._data)
 
+    def pretty(self, *args: Any, **kwargs: Any) -> str:
+        if isinstance(self._data, PrettyPrintable):
+            return self._data.pretty(*args, **kwargs)
+        return str(self)
 
-class PagedList(PagedData[Sequence[_T_co]], Sequence[_T_co]):
+
+class PagedList(PagedData[Sequence[_T_co]], Sequence[_T_co], PrettyPrintable):
     def __init__(self, data: Iterable[_T_co], rels: dict[RelType, Url] | None = None) -> None:
         super().__init__(list(data), rels)
 
@@ -512,6 +520,12 @@ class PagedList(PagedData[Sequence[_T_co]], Sequence[_T_co]):
     def __str__(self) -> str:
         return "\n".join(str(item) for item in self._data)
 
+    def pretty(self, *args: Any, **kwargs: Any) -> str:
+        return "\n".join(
+            (item.pretty(*args, **kwargs) if isinstance(item, PrettyPrintable) else str(item))
+            for item in self._data
+        )
+
 
 class TypedDictDataclass(ABC, Generic[_TD]):
     # _base_typed_dict: ClassVar[type[Mapping[str, Any]]]  # ClassVar[type[_TD]] not supported
@@ -526,6 +540,12 @@ class TypedDictDataclass(ABC, Generic[_TD]):
 
     @abstractmethod
     def __str__(self) -> str: ...
+
+    @final
+    def as_type(self, target_type: type[_T]) -> _T:
+        if isinstance(self, target_type):
+            return cast(_T, self)
+        raise TypeError(f"Cannot convert {type(self)} to {target_type}")
 
 
 class AuthorShortDict(TypedDict):
@@ -564,7 +584,7 @@ class AuthorDict(TypedDict):
 
 
 @dataclass
-class Author(TypedDictDataclass[AuthorDict]):
+class Author(TypedDictDataclass[AuthorDict], PrettyPrintable):
     id_auteur: AuthorId
     nom: str
     statut: AccountType
@@ -618,7 +638,7 @@ class Author(TypedDictDataclass[AuthorDict]):
             + f"  Solutions: {len(self.solutions)}\n"
             + indent((str(solution) for solution in self.solutions), 4, True)
             + f"  Validations: {len(self.validations)}\n"
-            + indent((str(validation) for validation in self.validations), 4, True)
+            + indent((str(validation) for validation in self.validations), 4)
         )
 
 
@@ -700,7 +720,7 @@ class ChallengeDict(TypedDict):
 
 
 @dataclass
-class Challenge(TypedDictDataclass[ChallengeDict]):
+class Challenge(TypedDictDataclass[ChallengeDict], PrettyPrintable):
     titre: str
     rubrique: str
     soustitre: str
@@ -743,7 +763,7 @@ class Challenge(TypedDictDataclass[ChallengeDict]):
             f"| Authors: {', '.join(str(author) for author in self.auteurs)} "
             f"| Score: {self.score} [{self.difficulte}] "
             f"| Created: {self.date_publication} "
-            f"| Updated: {self.maj} "
+            f"| Updated: {self.maj}"
         )
 
     def pretty(self, lang: Language = Language.EN) -> str:
@@ -757,7 +777,7 @@ class Challenge(TypedDictDataclass[ChallengeDict]):
             f"  Score: {self.score} [{self.difficulte.localized_name(lang)}] "
             f"| Created: {self.date_publication} "
             f"| Updated: {self.maj}\n"
-            f"  Authors: {', '.join(str(author) for author in self.auteurs)}\n"
+            f"  Authors: {', '.join(str(author) for author in self.auteurs)}"
         )
 
 

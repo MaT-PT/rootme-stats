@@ -4,8 +4,8 @@ import asyncio
 
 from dotenv import dotenv_values
 
-from rm_api import RootMeAPI
-from rm_datamodel import Language
+from librootme.api import RootMeAPI
+from librootme.datamodel import ChallengeShort, Language
 
 CONFIG = dotenv_values(verbose=True)
 
@@ -16,23 +16,35 @@ async def main() -> None:
 
     rm_api = RootMeAPI(api_key, lang=Language.EN)
 
-    # authors = await rm_api.get_authors(lang=Language.RU)
-    # print(authors)
-    # print(len(authors))
-    # print("Prev:", authors.prev)
-    # print("Next:", authors.next)
+    async for author_short in rm_api.iter_authors("ToG"):
+        print(author_short)
 
-    # author = await rm_api.get_author(authors[0].id_auteur)
-    # print(author)
+    author = await rm_api.get_author_by_name("ToG")
+    if author is not None:
+        print(author)
+        print()
+        print(author.pretty())
+        print()
 
-    challenges = await rm_api.get_challenges(lang=Language.RU)
-    # print(challenges)
-    # print(len(challenges))
-    # print("Prev:", challenges.prev)
-    # print("Next:", challenges.next)
+    authors = await rm_api.get_authors(name="Demat")
+    print(authors)
+    print()
+    author = await rm_api.get_author(authors[-1])
+    print(author)
+    print()
+    print(author.pretty())
+    print()
 
-    challenge = await rm_api.get_challenge(challenges[0].id_challenge)
-    print(challenge)
+    challenges = await rm_api.get_challenges(titre="WinKern", lang=Language.FR)
+    print(challenges)
+    print()
+
+    async for chall_short in rm_api.iter_list_elements(challenges):
+        challenge = await rm_api.get_challenge(chall_short.as_type(ChallengeShort))
+        print(challenge)
+        print()
+        print(challenge.pretty())
+        print()
 
 
 if __name__ == "__main__":
