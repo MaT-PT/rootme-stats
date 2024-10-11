@@ -3,8 +3,8 @@ from urllib.parse import parse_qs
 
 from httpx import AsyncClient, AsyncHTTPTransport, Timeout
 
+from .constants import AccountType, Language, LanguageCode, Rel, RelType
 from .datamodel import (
-    AccountType,
     Author,
     AuthorDict,
     AuthorShort,
@@ -14,16 +14,11 @@ from .datamodel import (
     ChallengeShort,
     ChallengeShortDict,
     ChallengeVeryShort,
-    Language,
-    LanguageCode,
-    PagedItem,
-    PagedList,
-    Rel,
     RelDict,
-    RelType,
     TypedDictDataclass,
     ValidationChallenge,
 )
+from .paged import PagedItem, PagedList
 from .types import _T, _TD, AuthorId, ChallengeId, DictList
 
 API_URL = "https://api.www.root-me.org"
