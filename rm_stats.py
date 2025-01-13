@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
 import asyncio
+from datetime import datetime
 
 from dotenv import dotenv_values
 
 from librootme.api import RootMeAPI
-from librootme.datamodel import ChallengeShort, Language
+from librootme.constants import Language
 
 CONFIG = dotenv_values(verbose=True)
 
@@ -16,35 +17,24 @@ async def main() -> None:
 
     rm_api = RootMeAPI(api_key, lang=Language.EN)
 
-    async for author_short in rm_api.iter_authors("ToG"):
-        print(author_short)
-
-    author = await rm_api.get_author_by_name("ToG")
-    if author is not None:
-        print(author)
-        print()
-        print(author.pretty())
-        print()
-
-    authors = await rm_api.get_authors(name="Demat")
-    print(authors)
+    username = "Demat"
+    user = await rm_api.get_author_by_name(username)
+    if user is None:
+        print(f"{username} not found")
+        return
+    print(user)
     print()
-    author = await rm_api.get_author(authors[-1])
-    print(author)
-    print()
-    print(author.pretty())
+    print(user.pretty())
     print()
 
-    challenges = await rm_api.get_challenges(titre="WinKern", lang=Language.FR)
-    print(challenges)
-    print()
+    for val in sorted(user.validations, key=lambda x: x.date):
+        print(f"{val.date} - {val.titre} [{val.id_rubrique}] (#{val.id_challenge})")
 
-    async for chall_short in rm_api.iter_list_elements(challenges):
-        challenge = await rm_api.get_challenge(chall_short.as_type(ChallengeShort))
-        print(challenge)
-        print()
-        print(challenge.pretty())
-        print()
+    start_date = datetime(2024, 9, 20)
+    print()
+    print(
+        f"Since {start_date.date()}: {len([val for val in user.validations if val.date >= start_date])} validations"
+    )
 
 
 if __name__ == "__main__":
