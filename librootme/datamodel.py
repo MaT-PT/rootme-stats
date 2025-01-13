@@ -83,6 +83,9 @@ class AuthorShort(TypedDictDataclass[AuthorShortDict]):
     def __str__(self) -> str:
         return f"{self.nom} ({self.id_auteur})"
 
+    def __hash__(self) -> int:
+        return hash(self.id_auteur)
+
 
 class AuthorDict(TypedDict):
     id_auteur: IntStr
@@ -156,6 +159,9 @@ class Author(TypedDictDataclass[AuthorDict], PrettyPrintable):
             + indent((str(validation) for validation in self.validations), 4)
         )
 
+    def __hash__(self) -> int:
+        return hash(self.id_auteur)
+
 
 class ChallengeVeryShortDict(TypedDict):
     id_challenge: IntStr
@@ -179,6 +185,9 @@ class ChallengeVeryShort(TypedDictDataclass[ChallengeVeryShortDict]):
 
     def __str__(self) -> str:
         return f"{self.id_challenge}: {self.titre} ({get_absolute_url(self.url_challenge)})"
+
+    def __hash__(self) -> int:
+        return hash(self.id_challenge)
 
 
 class ChallengeShortDict(TypedDict):
@@ -216,6 +225,9 @@ class ChallengeShort(TypedDictDataclass[ChallengeShortDict]):
             f"| Created: {self.date_publication} "
             f"| Updated: {self.maj}"
         )
+
+    def __hash__(self) -> int:
+        return hash(self.id_challenge)
 
 
 class ChallengeDict(TypedDict):
@@ -295,6 +307,9 @@ class Challenge(TypedDictDataclass[ChallengeDict], PrettyPrintable):
             f"  Authors: {', '.join(str(author) for author in self.auteurs)}"
         )
 
+    def __hash__(self) -> int:
+        return hash(self.id_trad)
+
 
 class SolutionDict(TypedDict):
     id_solution: IntStr
@@ -315,6 +330,9 @@ class Solution(TypedDictDataclass[SolutionDict]):
 
     def __str__(self) -> str:
         return f"{self.id_solution}: {get_absolute_url(self.url_solution)}"
+
+    def __hash__(self) -> int:
+        return hash(self.id_solution)
 
 
 class ValidationAuthorDict(TypedDict):
@@ -343,6 +361,9 @@ class ValidationAuthor(TypedDictDataclass[ValidationAuthorDict]):
     def __str__(self) -> str:
         return f"{self.id_challenge}: {self.titre} [{self.id_rubrique}] | {self.date}"
 
+    def __hash__(self) -> int:
+        return hash(self.id_challenge)
+
 
 class ValidationChallengeDict(TypedDict):
     id_auteur: IntStr
@@ -363,3 +384,6 @@ class ValidationChallenge(TypedDictDataclass[ValidationChallengeDict]):
 
     def __str__(self) -> str:
         return f"{self.id_auteur} | {self.date}"
+
+    def __hash__(self) -> int:
+        return hash(self.id_auteur)
